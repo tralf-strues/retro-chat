@@ -28,19 +28,15 @@ std::string serializeMessage(const Message& message)
     return fmt::format("{},{}", message.sender.name, message.text);
 }
 
-void deserializeMessage(Message* message, const std::string& serialized)
+void deserializeMessage(Message* message, const char* serialized)
 {
     assert(message);
 
-    size_t i = 0;
-    while (serialized[i] != ',')
-    {
-        message->sender.name.push_back(serialized[i++]);
-    }
+    const char* separator = strchr(serialized, ',');
+    message->sender.name.append(serialized, separator - serialized);
 
-    ++i;
-
-    message->text = serialized.substr(i);
+    const char* end = strchr(separator, '\n');
+    message->text.append(separator + 1, end - separator - 1);
 }
 
 }

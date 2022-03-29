@@ -15,35 +15,34 @@
 
 constexpr int32_t DEFAULT_PORT = 1234;
 
-void runServerClient(int32_t port, rchat::User user)
+template<typename TEndpoint>
+void runEndpoint(TEndpoint& endpoint, rchat::User user)
 {
-    rchat::network::Server server{DEFAULT_PORT};
+    std::thread receiveThread{[&]() {
+        while (true)
+        {
+            endpoint.receive();
+
+            const char* received = endpoint.template receiveBuffer<const char*>();
+            rchat::Message message;
+            rchat::deserializeMessage(&message, received);
+
+            fmt::print("Received message: sender='{}', text='{}'\n", message.sender.name, message.text);
+        }
+    }};
+
+    std::string messageToSend;
 
     while (true)
     {
-        server.receive();
+        std::getline(std::cin, messageToSend);
 
-        const std::string received{server.receiveBuffer<const char*>()};
-        rchat::Message message;
-        rchat::deserializeMessage(&message, received);
+        rchat::Message message(user, fmt::format("{}", messageToSend));
 
-        fmt::print("Server received message: sender='{}', text='{}'\n", message.sender.name, message.text);
+        std::string serializedMessage = rchat::serializeMessage(message);
+        endpoint.send(reinterpret_cast<const uint8_t*>(serializedMessage.data()), serializedMessage.length());
+        endpoint.send(reinterpret_cast<const uint8_t*>("\n"), 1);
     }
-}
-
-void runRegularClient(int32_t port, rchat::User user)
-{
-    rchat::network::Client client("127.0.0.1", DEFAULT_PORT);
-
-    rchat::Message message(user, "Hello from Client!\n");
-    
-    std::string serializedMessage = rchat::serializeMessage(message);
-    client.send(reinterpret_cast<const uint8_t*>(serializedMessage.data()),
-                serializedMessage.length() + 1);
-    
-    // size_t bytesReceived = client.receive();
-    // const char* data = client.receiveBuffer<const char*>();
-    // fmt::print("Server received message: sender='{}', text='{}'\n", message.sender.name, message.text);
 }
 
 int32_t main(int32_t argc, const char* argv[])
@@ -62,19 +61,7 @@ int32_t main(int32_t argc, const char* argv[])
         return 0;
     }
 
-    int32_t port = result["port"].as<int32_t>();
-
-    // if (result.count("port") > 0)
-    // {
-    //     port = result["port"].as<unsigned>();
-    // }
-    // else
-    // {
-    //     fmt::print("You have to specify port on which to be based! Please see help for more information!\n");
-    //     return 0;
-    // }
-
-    fmt::print("HERE?\n");
+    int32_t port = result["port"].as<int32_t>();;
 
     std::string username;
 
@@ -92,40 +79,14 @@ int32_t main(int32_t argc, const char* argv[])
 
     if (isServer)
     {
-        runServerClient(port, rchat::User(username));
+        rchat::network::Server server{port};
+        runEndpoint(server, rchat::User(username));
     }
     else
     {
-        runRegularClient(port, rchat::User(username));
+        rchat::network::Client client{"127.0.0.1", port};
+        runEndpoint(client, rchat::User(username));
     }
-
-    // rchat::network::Server server(1234);
-    
-    // server.receive();
-    // const std::string msg{server.receiveBuffer<const char*>()};
-    // std::cout << msg << std::endl;
-
-    // server.send(reinterpret_cast<const uint8_t*>("Hello From Server!"), sizeof("Hello From Server!"));
-    // std::cout << "Servent sent Hello message to Client!" << std::endl;
-
-    // boost::asio::io_service ioService;
-
-    // // listen for new connection
-    // boost::asio::ip::tcp::acceptor acceptor(ioService, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), 1234));
-
-    // // socket creation
-    // boost::asio::ip::tcp::socket socket(ioService);
-
-    // // waiting for connection
-    // acceptor.accept(socket);
-
-    // // read operation
-    // std::string message = read(socket);
-    // std::cout << message << std::endl;
-
-    // // write operation
-    // send(socket, "Hello From Server!");
-    // std::cout << "Servent sent Hello message to Client!" << std::endl;
 
     return 0;
 }
